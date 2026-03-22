@@ -13,16 +13,16 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
       
-    - name: Setup Node.js 24
+    - name: Setup Node.js 22
       uses: actions/setup-node@v4
       with:
-        node-version: '24'
+        node-version: '22'
         
-    - name: Setup Java 21 (Temurin)
+    - name: Setup Java 17 (Stable with Cordova)
       uses: actions/setup-java@v4
       with:
         distribution: 'temurin'
-        java-version: '21'
+        java-version: '17'
         
     - name: Setup Android SDK
       uses: android-actions/setup-android@v3
@@ -35,7 +35,7 @@ jobs:
         
     - name: Add Android Platform
       working-directory: ./build
-      run: cordova platform add android@12.0.0
+      run: cordova platform add android@11.0.0
         
     - name: Install Plugins
       working-directory: ./build
@@ -49,7 +49,7 @@ jobs:
       run: |
         cp www/index.html build/www/
         cp config.xml build/
-        cp icon.png build/www/ 2>/dev/null || echo "No icon found"
+        cp icon.png build/www/ 2>/dev/null || echo "No icon"
         
     - name: Build Debug APK
       working-directory: ./build
@@ -64,12 +64,10 @@ jobs:
       with:
         name: VLC-Pro-Debug-APK
         path: build/platforms/android/app/build/outputs/apk/debug/app-debug.apk
-        if-no-files-found: warn
         
     - name: Upload Release APK
       uses: actions/upload-artifact@v4
       with:
         name: VLC-Pro-Release-APK
         path: build/platforms/android/app/build/outputs/apk/release/app-release-unsigned.apk
-        if-no-files-found: warn
         
