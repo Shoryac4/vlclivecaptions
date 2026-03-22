@@ -1,0 +1,73 @@
+<?xml version='1.0' encoding='utf-8'?>
+<widget id="com.vlcpro.translator" version="1.0.0" xmlns="http://www.w3.org/ns/widgets" xmlns:cdv="http://cordova.apache.org/ns/1.0">
+    <name>VLC Pro Translator</name>
+    <description>
+        VLC Media Player with Auto Language Detection and Real-time Translation
+    </description>
+    <author email="vlcpro@example.com" href="https://github.com/yourusername/vlc-pro">
+        VLC Pro Team
+    </author>
+    <content src="index.html" />
+
+    <!-- Allow all connections for translation APIs -->
+    <access origin="*" />
+    <allow-intent href="http://*/*" />
+    <allow-intent href="https://*/*" />
+    <allow-navigation href="*" />
+
+    <!-- Platform specific settings -->
+    <platform name="android">
+        <allow-intent href="market:*" />
+
+        <!-- Android SDK versions -->
+        <preference name="android-minSdkVersion" value="22" />
+        <preference name="android-targetSdkVersion" value="33" />
+        <preference name="android-compileSdkVersion" value="33" />
+
+        <!-- Permissions -->
+        <config-file parent="/manifest" target="AndroidManifest.xml">
+            <uses-permission android:name="android.permission.INTERNET" />
+            <uses-permission android:name="android.permission.RECORD_AUDIO" />
+            <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+            <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+            <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+            <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+        </config-file>
+
+        <!-- Application settings -->
+        <config-file parent="/manifest/application" target="AndroidManifest.xml">
+            <activity android:name="com.vlcpro.translator.MainActivity" 
+                      android:configChanges="orientation|screenSize|smallestScreenSize|keyboard|keyboardHidden">
+            </activity>
+        </config-file>
+
+        <!-- Icons for different densities -->
+        <icon src="www/icon.png" density="ldpi" />
+        <icon src="www/icon.png" density="mdpi" />
+        <icon src="www/icon.png" density="hdpi" />
+        <icon src="www/icon.png" density="xhdpi" />
+        <icon src="www/icon.png" density="xxhdpi" />
+        <icon src="www/icon.png" density="xxxhdpi" />
+
+        <!-- Splash screen (optional) -->
+        <splash src="www/icon.png" density="port-hdpi" />
+        <splash src="www/icon.png" density="land-hdpi" />
+    </platform>
+
+    <!-- Global preferences -->
+    <preference name="Fullscreen" value="true" />
+    <preference name="Orientation" value="default" />
+    <preference name="DisallowOverscroll" value="true" />
+    <preference name="BackgroundColor" value="0xFF000000" />
+    <preference name="StatusBarOverlaysWebView" value="true" />
+    <preference name="StatusBarBackgroundColor" value="#000000" />
+    <preference name="KeepRunning" value="true" />
+    <preference name="AndroidLaunchMode" value="singleTop" />
+
+    <!-- Required plugins -->
+    <plugin name="cordova-plugin-whitelist" spec="^1.3.4" />
+    <plugin name="cordova-plugin-media" spec="^5.0.4" />
+    <plugin name="cordova-plugin-file" spec="^7.0.0" />
+    <plugin name="cordova-plugin-permission" spec="^0.1.0" />
+    <plugin name="cordova-plugin-statusbar" spec="^3.0.0" />
+</widget>
