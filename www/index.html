@@ -1,0 +1,1843 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta http-equiv="Content-Security-Policy" content="default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; media-src *; connect-src *;">
+    <script src="cordova.js"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>VLC Pro - Auto-Detect & Translate Captions</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        :root {
+            --vlc-orange: #ff8800;
+            --vlc-dark: #1a1a1a;
+            --vlc-darker: #0d0d0d;
+            --vlc-gray: #333;
+            --vlc-light-gray: #666;
+            --translation-bg: rgba(0, 100, 255, 0.85);
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #000;
+            color: #fff;
+            overflow: hidden;
+            touch-action: none;
+        }
+
+        #app {
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            background: var(--vlc-darker);
+        }
+
+        /* Header */
+        .header {
+            background: var(--vlc-dark);
+            padding: 12px 16px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid var(--vlc-gray);
+            z-index: 100;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-weight: 600;
+            font-size: 18px;
+            color: var(--vlc-orange);
+        }
+
+        .traffic-cone {
+            width: 28px;
+            height: 28px;
+            position: relative;
+        }
+
+        .traffic-cone::before {
+            content: '';
+            position: absolute;
+            width: 0;
+            height: 0;
+            border-left: 14px solid transparent;
+            border-right: 14px solid transparent;
+            border-bottom: 24px solid var(--vlc-orange);
+            top: 2px;
+        }
+
+        .traffic-cone::after {
+            content: '';
+            position: absolute;
+            width: 16px;
+            height: 4px;
+            background: var(--vlc-orange);
+            bottom: 0;
+            left: 6px;
+            border-radius: 1px;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .icon-btn {
+            background: none;
+            border: none;
+            color: #fff;
+            font-size: 20px;
+            cursor: pointer;
+            padding: 6px;
+            opacity: 0.9;
+            transition: all 0.2s;
+            border-radius: 6px;
+            position: relative;
+        }
+
+        .icon-btn:hover, .icon-btn:active {
+            opacity: 1;
+            background: rgba(255,255,255,0.1);
+        }
+
+        .icon-btn.active {
+            color: var(--vlc-orange);
+            background: rgba(255, 136, 0, 0.2);
+        }
+
+        .detected-lang {
+            font-size: 11px;
+            color: #aaa;
+            background: rgba(255,255,255,0.1);
+            padding: 4px 8px;
+            border-radius: 12px;
+            margin-right: 8px;
+            display: none;
+        }
+
+        .detected-lang.show {
+            display: block;
+        }
+
+        /* Main Content */
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* Video Container */
+        .video-container {
+            flex: 1;
+            background: #000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        #videoPlayer {
+            width: 100%;
+            height: 100%;
+            max-height: 100%;
+            object-fit: contain;
+        }
+
+        /* Empty State */
+        .empty-state {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            color: var(--vlc-light-gray);
+            padding: 20px;
+        }
+
+        .empty-icon {
+            font-size: 64px;
+            margin-bottom: 16px;
+            opacity: 0.5;
+        }
+
+        .empty-text {
+            font-size: 16px;
+            margin-bottom: 24px;
+        }
+
+        .file-input-wrapper {
+            position: relative;
+            overflow: hidden;
+            display: inline-block;
+        }
+
+        .file-input-wrapper input[type=file] {
+            position: absolute;
+            left: -9999px;
+        }
+
+        .btn-primary {
+            background: var(--vlc-orange);
+            color: #000;
+            border: none;
+            padding: 14px 28px;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            font-size: 15px;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-primary:active {
+            transform: scale(0.98);
+        }
+
+        .btn-secondary {
+            background: rgba(255,255,255,0.1);
+            color: #fff;
+            border: 1px solid rgba(255,255,255,0.2);
+            padding: 10px 20px;
+            border-radius: 6px;
+            font-weight: 500;
+            cursor: pointer;
+            font-size: 14px;
+            margin-top: 12px;
+            transition: all 0.2s;
+        }
+
+        .btn-secondary:active {
+            background: rgba(255,255,255,0.2);
+        }
+
+        /* Captions Container */
+        .captions-wrapper {
+            position: absolute;
+            bottom: 100px;
+            left: 0;
+            right: 0;
+            padding: 0 20px;
+            pointer-events: none;
+            z-index: 50;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .caption-box {
+            background: rgba(0, 0, 0, 0.9);
+            color: #fff;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-size: 18px;
+            line-height: 1.5;
+            max-width: 90%;
+            text-align: center;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.9);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            min-height: 28px;
+            transition: all 0.3s;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .caption-box::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: var(--vlc-orange);
+            transform: scaleX(0);
+            transition: transform 0.3s;
+        }
+
+        .caption-box.translating::before {
+            transform: scaleX(1);
+            animation: translating 1s infinite;
+        }
+
+        @keyframes translating {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .caption-box.interim {
+            color: #aaa;
+            border-color: rgba(255,255,255,0.1);
+        }
+
+        .caption-box.final {
+            color: #fff;
+            font-weight: 500;
+            border-color: var(--vlc-orange);
+        }
+
+        .caption-box.translated {
+            background: var(--translation-bg);
+            border-color: rgba(100, 150, 255, 0.5);
+        }
+
+        .original-text {
+            font-size: 12px;
+            color: #aaa;
+            margin-top: 6px;
+            font-style: italic;
+            border-top: 1px solid rgba(255,255,255,0.2);
+            padding-top: 6px;
+        }
+
+        .lang-indicator {
+            position: absolute;
+            top: -10px;
+            right: 10px;
+            background: var(--vlc-orange);
+            color: #000;
+            font-size: 10px;
+            font-weight: 700;
+            padding: 2px 8px;
+            border-radius: 10px;
+            text-transform: uppercase;
+        }
+
+        /* Controls Overlay */
+        .controls-overlay {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: linear-gradient(to top, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.7) 60%, transparent 100%);
+            padding: 24px 16px 16px;
+            z-index: 60;
+            transition: opacity 0.3s;
+        }
+
+        .controls-overlay.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        /* Progress Bar */
+        .progress-container {
+            width: 100%;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+
+        .time {
+            font-size: 12px;
+            color: #ccc;
+            font-variant-numeric: tabular-nums;
+            min-width: 50px;
+            font-weight: 500;
+        }
+
+        .progress-bar {
+            flex: 1;
+            height: 4px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 2px;
+            position: relative;
+            cursor: pointer;
+            overflow: visible;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: var(--vlc-orange);
+            border-radius: 2px;
+            width: 0%;
+            position: relative;
+            transition: width 0.1s linear;
+        }
+
+        .progress-handle {
+            position: absolute;
+            right: -8px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 16px;
+            height: 16px;
+            background: #fff;
+            border-radius: 50%;
+            opacity: 0;
+            transition: all 0.2s;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+        }
+
+        .progress-bar:hover .progress-handle,
+        .progress-bar:active .progress-handle {
+            opacity: 1;
+            transform: translateY(-50%) scale(1.1);
+        }
+
+        .progress-bar:hover,
+        .progress-bar:active {
+            height: 6px;
+        }
+
+        /* Control Buttons */
+        .controls-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .controls-left, .controls-right {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .control-btn {
+            background: none;
+            border: none;
+            color: #fff;
+            font-size: 22px;
+            cursor: pointer;
+            padding: 10px;
+            border-radius: 50%;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 44px;
+            height: 44px;
+            position: relative;
+        }
+
+        .control-btn:hover, .control-btn:active {
+            background: rgba(255,255,255,0.15);
+            color: var(--vlc-orange);
+        }
+
+        .control-btn.play-pause {
+            font-size: 28px;
+            width: 52px;
+            height: 52px;
+            background: rgba(255,255,255,0.1);
+        }
+
+        .control-btn.active {
+            color: var(--vlc-orange);
+            background: rgba(255, 136, 0, 0.25);
+        }
+
+        .control-btn .badge {
+            position: absolute;
+            top: 2px;
+            right: 2px;
+            width: 8px;
+            height: 8px;
+            background: #00ff00;
+            border-radius: 50%;
+            display: none;
+            animation: pulse 2s infinite;
+        }
+
+        .control-btn.active .badge.show {
+            display: block;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.6; transform: scale(0.8); }
+        }
+
+        /* Volume Slider */
+        .volume-container {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .volume-slider {
+            width: 0;
+            height: 4px;
+            background: rgba(255,255,255,0.3);
+            border-radius: 2px;
+            overflow: hidden;
+            transition: width 0.3s;
+            cursor: pointer;
+        }
+
+        .volume-container:hover .volume-slider,
+        .volume-container.active .volume-slider {
+            width: 80px;
+        }
+
+        .volume-fill {
+            height: 100%;
+            background: #fff;
+            width: 100%;
+            transition: width 0.1s;
+        }
+
+        /* Settings Panel */
+        .settings-panel {
+            position: absolute;
+            top: 60px;
+            right: 16px;
+            background: rgba(20, 20, 20, 0.98);
+            border-radius: 12px;
+            padding: 20px;
+            width: 320px;
+            max-height: calc(100vh - 100px);
+            overflow-y: auto;
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255,255,255,0.1);
+            z-index: 200;
+            display: none;
+            box-shadow: 0 12px 40px rgba(0,0,0,0.6);
+        }
+
+        .settings-panel.show {
+            display: block;
+            animation: slideIn 0.25s ease-out;
+        }
+
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(-15px) scale(0.98); }
+            to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+
+        .settings-title {
+            font-size: 16px;
+            font-weight: 700;
+            margin-bottom: 20px;
+            color: var(--vlc-orange);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .setting-group {
+            margin-bottom: 24px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .setting-group:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+            padding-bottom: 0;
+        }
+
+        .setting-label {
+            font-size: 13px;
+            color: #888;
+            margin-bottom: 10px;
+            display: block;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .language-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+
+        .language-btn {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            color: #ccc;
+            padding: 10px 8px;
+            border-radius: 8px;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-align: center;
+        }
+
+        .language-btn:hover {
+            background: rgba(255,255,255,0.1);
+            border-color: rgba(255,255,255,0.2);
+        }
+
+        .language-btn.active {
+            background: var(--vlc-orange);
+            color: #000;
+            border-color: var(--vlc-orange);
+            font-weight: 600;
+        }
+
+        .setting-options {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .option-btn {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            color: #ccc;
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s;
+            flex: 1;
+            min-width: 60px;
+        }
+
+        .option-btn:hover {
+            background: rgba(255,255,255,0.1);
+        }
+
+        .option-btn.active {
+            background: var(--vlc-orange);
+            color: #000;
+            border-color: var(--vlc-orange);
+            font-weight: 600;
+        }
+
+        .toggle-switch {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 0;
+        }
+
+        .toggle-label {
+            font-size: 14px;
+            color: #fff;
+        }
+
+        .toggle-btn {
+            width: 50px;
+            height: 28px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 14px;
+            position: relative;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        .toggle-btn.active {
+            background: var(--vlc-orange);
+        }
+
+        .toggle-btn::after {
+            content: '';
+            position: absolute;
+            width: 24px;
+            height: 24px;
+            background: #fff;
+            border-radius: 50%;
+            top: 2px;
+            left: 2px;
+            transition: transform 0.3s;
+        }
+
+        .toggle-btn.active::after {
+            transform: translateX(22px);
+        }
+
+        /* Toast Notification */
+        .toast {
+            position: fixed;
+            bottom: 120px;
+            left: 50%;
+            transform: translateX(-50%) translateY(100px);
+            background: rgba(0,0,0,0.95);
+            color: #fff;
+            padding: 14px 28px;
+            border-radius: 30px;
+            font-size: 14px;
+            z-index: 1000;
+            opacity: 0;
+            transition: all 0.3s;
+            border: 1px solid rgba(255,255,255,0.15);
+            backdrop-filter: blur(10px);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            max-width: 90%;
+            text-align: center;
+        }
+
+        .toast.show {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+
+        .toast-icon {
+            font-size: 18px;
+        }
+
+        /* Loading Spinner */
+        .spinner {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 60px;
+            height: 60px;
+            border: 4px solid rgba(255,136,0,0.2);
+            border-top-color: var(--vlc-orange);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            display: none;
+        }
+
+        .spinner.show {
+            display: block;
+        }
+
+        @keyframes spin {
+            to { transform: translate(-50%, -50%) rotate(360deg); }
+        }
+
+        /* Center Play Button */
+        .center-play {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 90px;
+            height: 90px;
+            background: rgba(255,136,0,0.95);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 45px;
+            color: #000;
+            cursor: pointer;
+            opacity: 0;
+            transition: all 0.3s;
+            z-index: 40;
+            box-shadow: 0 8px 32px rgba(255,136,0,0.4);
+        }
+
+        .video-container:hover .center-play,
+        .video-container.paused .center-play {
+            opacity: 1;
+        }
+
+        .center-play:active {
+            transform: translate(-50%, -50%) scale(0.92);
+        }
+
+        /* Translation Status */
+        .translation-status {
+            position: absolute;
+            top: 70px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.8);
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 12px;
+            color: #aaa;
+            display: none;
+            align-items: center;
+            gap: 8px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.1);
+            z-index: 45;
+        }
+
+        .translation-status.show {
+            display: flex;
+        }
+
+        .translation-status.translating {
+            color: var(--vlc-orange);
+        }
+
+        .lang-pair {
+            font-weight: 600;
+            color: #fff;
+        }
+
+        /* Responsive */
+        @media (max-width: 480px) {
+            .caption-box {
+                font-size: 15px;
+                padding: 8px 16px;
+            }
+
+            .controls-overlay {
+                padding: 20px 12px 12px;
+            }
+
+            .control-btn {
+                width: 40px;
+                height: 40px;
+                font-size: 20px;
+            }
+
+            .control-btn.play-pause {
+                width: 48px;
+                height: 48px;
+                font-size: 24px;
+            }
+
+            .settings-panel {
+                width: calc(100vw - 32px);
+                right: 16px;
+            }
+
+            .language-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* Fullscreen */
+        :fullscreen .header {
+            display: none;
+        }
+
+        :-webkit-full-screen .header {
+            display: none;
+        }
+
+        :fullscreen .captions-wrapper {
+            bottom: 120px;
+        }
+
+        :-webkit-full-screen .captions-wrapper {
+            bottom: 120px;
+        }
+
+        /* Gesture hints */
+        .gesture-hint {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            background: rgba(0,0,0,0.8);
+            padding: 20px;
+            border-radius: 12px;
+            font-size: 24px;
+            opacity: 0;
+            transition: opacity 0.3s;
+            pointer-events: none;
+            z-index: 35;
+        }
+
+        .gesture-hint.show {
+            opacity: 1;
+        }
+
+        .gesture-hint.left {
+            left: 20px;
+        }
+
+        .gesture-hint.right {
+            right: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <!-- Header -->
+        <div class="header">
+            <div class="logo">
+                <div class="traffic-cone"></div>
+                <span>VLC Pro</span>
+            </div>
+            <div class="header-actions">
+                <div class="detected-lang" id="detectedLang"></div>
+                <button class="icon-btn" id="translateBtn" title="Auto-Translate">🌐</button>
+                <button class="icon-btn" id="settingsBtn" title="Settings">⚙️</button>
+                <button class="icon-btn" id="fullscreenBtn" title="Fullscreen">⛶</button>
+            </div>
+        </div>
+
+        <!-- Settings Panel -->
+        <div class="settings-panel" id="settingsPanel">
+            <div class="settings-title">⚙️ Caption Settings</div>
+
+            <div class="setting-group">
+                <label class="setting-label">🎯 Target Language (Translate To)</label>
+                <div class="language-grid" id="targetLangGrid">
+                    <!-- Generated by JS -->
+                </div>
+            </div>
+
+            <div class="setting-group">
+                <label class="setting-label">🎨 Caption Style</label>
+                <div class="setting-options">
+                    <button class="option-btn" data-size="small">Small</button>
+                    <button class="option-btn active" data-size="medium">Medium</button>
+                    <button class="option-btn" data-size="large">Large</button>
+                </div>
+            </div>
+
+            <div class="setting-group">
+                <label class="setting-label">📍 Position</label>
+                <div class="setting-options">
+                    <button class="option-btn active" data-pos="bottom">Bottom</button>
+                    <button class="option-btn" data-pos="top">Top</button>
+                </div>
+            </div>
+
+            <div class="setting-group">
+                <label class="setting-label">🔄 Translation Options</label>
+                <div class="toggle-switch">
+                    <span class="toggle-label">Show Original Text</span>
+                    <div class="toggle-btn" id="showOriginalToggle"></div>
+                </div>
+                <div class="toggle-switch">
+                    <span class="toggle-label">Auto-Detect Language</span>
+                    <div class="toggle-btn active" id="autoDetectToggle"></div>
+                </div>
+            </div>
+
+            <div class="setting-group">
+                <label class="setting-label">ℹ️ About</label>
+                <p style="font-size: 12px; color: #666; line-height: 1.5;">
+                    Uses free translation APIs. Requires internet for translation. 
+                    Speech recognition works offline on most Android devices.
+                </p>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <div class="video-container" id="videoContainer">
+                <!-- Empty State -->
+                <div class="empty-state" id="emptyState">
+                    <div class="empty-icon">📁</div>
+                    <div class="empty-text">Select a video file to start</div>
+                    <div class="file-input-wrapper">
+                        <input type="file" id="fileInput" accept="video/*,audio/*">
+                        <button class="btn-primary" onclick="document.getElementById('fileInput').click()">
+                            📂 Open File
+                        </button>
+                    </div>
+                    <button class="btn-secondary" id="demoBtn">
+                        ▶️ Try Demo
+                    </button>
+                </div>
+
+                <!-- Video Player -->
+                <video id="videoPlayer" style="display: none;"></video>
+
+                <!-- Loading Spinner -->
+                <div class="spinner" id="spinner"></div>
+
+                <!-- Center Play Button -->
+                <div class="center-play" id="centerPlay">▶</div>
+
+                <!-- Gesture Hints -->
+                <div class="gesture-hint left" id="gestureLeft">⏪</div>
+                <div class="gesture-hint right" id="gestureRight">⏩</div>
+
+                <!-- Translation Status -->
+                <div class="translation-status" id="transStatus">
+                    <span>🌐</span>
+                    <span>Auto-detecting: <span class="lang-pair" id="langPair">...</span></span>
+                </div>
+
+                <!-- Captions Container -->
+                <div class="captions-wrapper" id="captionsWrapper">
+                    <div class="caption-box" id="captionBox" style="opacity: 0;">
+                        <div class="lang-indicator" id="langIndicator" style="display: none;"></div>
+                        <div id="captionText"></div>
+                        <div class="original-text" id="originalText" style="display: none;"></div>
+                    </div>
+                </div>
+
+                <!-- Controls Overlay -->
+                <div class="controls-overlay" id="controlsOverlay">
+                    <!-- Progress Bar -->
+                    <div class="progress-container">
+                        <span class="time" id="currentTime">0:00</span>
+                        <div class="progress-bar" id="progressBar">
+                            <div class="progress-fill" id="progressFill">
+                                <div class="progress-handle"></div>
+                            </div>
+                        </div>
+                        <span class="time" id="duration">0:00</span>
+                    </div>
+
+                    <!-- Control Buttons -->
+                    <div class="controls-row">
+                        <div class="controls-left">
+                            <button class="control-btn play-pause" id="playPauseBtn">▶</button>
+                            <button class="control-btn" id="prevBtn">⏮</button>
+                            <button class="control-btn" id="nextBtn">⏭</button>
+                            <div class="volume-container" id="volumeContainer">
+                                <button class="control-btn" id="muteBtn">🔊</button>
+                                <div class="volume-slider" id="volumeSlider">
+                                    <div class="volume-fill" id="volumeFill"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="controls-right">
+                            <button class="control-btn" id="captionBtn" title="Live Captions (C)">
+                                📝
+                                <div class="badge" id="captionBadge"></div>
+                            </button>
+                            <button class="control-btn" id="speedBtn" title="Speed">1x</button>
+                            <button class="control-btn" id="loopBtn" title="Loop">🔁</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div class="toast" id="toast"></div>
+
+    <script>
+        // VLC Pro with Auto Language Detection & Real-time Translation
+        class VLCProPlayer {
+            constructor() {
+                this.video = document.getElementById('videoPlayer');
+                this.container = document.getElementById('videoContainer');
+                this.emptyState = document.getElementById('emptyState');
+                this.spinner = document.getElementById('spinner');
+                this.captionBox = document.getElementById('captionBox');
+                this.captionText = document.getElementById('captionText');
+                this.originalText = document.getElementById('originalText');
+                this.captionsWrapper = document.getElementById('captionsWrapper');
+                this.langIndicator = document.getElementById('langIndicator');
+                this.transStatus = document.getElementById('transStatus');
+                this.langPair = document.getElementById('langPair');
+                this.detectedLang = document.getElementById('detectedLang');
+
+                this.isPlaying = false;
+                this.isMuted = false;
+                this.volume = 1;
+                this.playbackSpeed = 1;
+                this.isLooping = false;
+                this.isCaptionsActive = false;
+                this.isTranslateMode = false;
+                this.recognition = null;
+                this.isFullscreen = false;
+
+                // Language settings
+                this.detectedLanguage = null;
+                this.targetLanguage = 'en';
+                this.isAutoDetect = true;
+                this.showOriginal = false;
+
+                // Translation cache to avoid API spam
+                this.translationCache = new Map();
+                this.lastTranscript = '';
+                this.translationQueue = [];
+                this.isTranslating = false;
+
+                // Supported languages with their codes
+                this.languages = {
+                    'en': 'English',
+                    'es': 'Spanish',
+                    'fr': 'French',
+                    'de': 'German',
+                    'it': 'Italian',
+                    'pt': 'Portuguese',
+                    'ru': 'Russian',
+                    'ja': 'Japanese',
+                    'ko': 'Korean',
+                    'zh': 'Chinese',
+                    'hi': 'Hindi',
+                    'ar': 'Arabic',
+                    'nl': 'Dutch',
+                    'pl': 'Polish',
+                    'tr': 'Turkish',
+                    'vi': 'Vietnamese',
+                    'th': 'Thai',
+                    'id': 'Indonesian',
+                    'ms': 'Malay'
+                };
+
+                // Speech recognition language codes mapping
+                this.speechLangCodes = {
+                    'en': 'en-US', 'es': 'es-ES', 'fr': 'fr-FR', 'de': 'de-DE',
+                    'it': 'it-IT', 'pt': 'pt-BR', 'ru': 'ru-RU', 'ja': 'ja-JP',
+                    'ko': 'ko-KR', 'zh': 'zh-CN', 'hi': 'hi-IN', 'ar': 'ar-SA',
+                    'nl': 'nl-NL', 'pl': 'pl-PL', 'tr': 'tr-TR', 'vi': 'vi-VN',
+                    'th': 'th-TH', 'id': 'id-ID', 'ms': 'ms-MY'
+                };
+
+                this.settings = {
+                    size: 'medium',
+                    position: 'bottom'
+                };
+
+                this.init();
+            }
+
+            init() {
+                this.setupEventListeners();
+                this.setupSpeechRecognition();
+                this.setupGestures();
+                this.renderLanguageGrid();
+                this.hideControlsTimeout = null;
+            }
+
+            setupEventListeners() {
+                // File input
+                document.getElementById('fileInput').addEventListener('change', (e) => {
+                    this.loadFile(e.target.files[0]);
+                });
+
+                // Demo button - load a sample video
+                document.getElementById('demoBtn').addEventListener('click', () => {
+                    this.showToast('📹 Demo mode: Use your own video file for full features');
+                    // In real implementation, you could load a sample video here
+                });
+
+                // Video events
+                this.video.addEventListener('loadedmetadata', () => {
+                    this.spinner.classList.remove('show');
+                    document.getElementById('duration').textContent = this.formatTime(this.video.duration);
+                });
+
+                this.video.addEventListener('timeupdate', () => {
+                    this.updateProgress();
+                });
+
+                this.video.addEventListener('ended', () => {
+                    this.isPlaying = false;
+                    this.updatePlayButton();
+                    if (this.isCaptionsActive) {
+                        this.stopCaptions();
+                    }
+                });
+
+                this.video.addEventListener('waiting', () => {
+                    this.spinner.classList.add('show');
+                });
+
+                this.video.addEventListener('playing', () => {
+                    this.spinner.classList.remove('show');
+                });
+
+                // Play/Pause
+                document.getElementById('playPauseBtn').addEventListener('click', () => this.togglePlay());
+                document.getElementById('centerPlay').addEventListener('click', () => this.togglePlay());
+
+                // Progress bar
+                const progressBar = document.getElementById('progressBar');
+                let isDragging = false;
+
+                const seekHandler = (e) => {
+                    if (!this.video.duration) return;
+                    const clientX = e.clientX || e.touches[0].clientX;
+                    const rect = progressBar.getBoundingClientRect();
+                    const pos = (clientX - rect.left) / rect.width;
+                    this.video.currentTime = Math.max(0, Math.min(pos * this.video.duration, this.video.duration));
+                    this.updateProgress();
+                };
+
+                progressBar.addEventListener('click', seekHandler);
+                progressBar.addEventListener('touchstart', (e) => {
+                    isDragging = true;
+                    seekHandler(e);
+                }, {passive: true});
+                progressBar.addEventListener('touchmove', (e) => {
+                    if (isDragging) {
+                        e.preventDefault();
+                        seekHandler(e);
+                    }
+                }, {passive: false});
+                progressBar.addEventListener('touchend', () => isDragging = false);
+
+                // Volume
+                document.getElementById('muteBtn').addEventListener('click', () => this.toggleMute());
+
+                const volumeSlider = document.getElementById('volumeSlider');
+                volumeSlider.addEventListener('click', (e) => {
+                    const rect = volumeSlider.getBoundingClientRect();
+                    const pos = (e.clientX - rect.left) / rect.width;
+                    this.setVolumeLevel(Math.max(0, Math.min(1, pos)));
+                });
+
+                // Captions & Translation
+                document.getElementById('captionBtn').addEventListener('click', () => this.toggleCaptions());
+                document.getElementById('translateBtn').addEventListener('click', () => this.toggleTranslationMode());
+
+                // Speed
+                document.getElementById('speedBtn').addEventListener('click', () => this.cycleSpeed());
+
+                // Loop
+                document.getElementById('loopBtn').addEventListener('click', () => this.toggleLoop());
+
+                // Fullscreen
+                document.getElementById('fullscreenBtn').addEventListener('click', () => this.toggleFullscreen());
+
+                // Settings
+                document.getElementById('settingsBtn').addEventListener('click', () => {
+                    document.getElementById('settingsPanel').classList.toggle('show');
+                });
+
+                // Toggles
+                document.getElementById('showOriginalToggle').addEventListener('click', (e) => {
+                    this.showOriginal = !this.showOriginal;
+                    e.target.classList.toggle('active');
+                    this.originalText.style.display = this.showOriginal ? 'block' : 'none';
+                    this.showToast(this.showOriginal ? 'Showing original text' : 'Hiding original text');
+                });
+
+                document.getElementById('autoDetectToggle').addEventListener('click', (e) => {
+                    this.isAutoDetect = !this.isAutoDetect;
+                    e.target.classList.toggle('active');
+                    this.showToast(this.isAutoDetect ? 'Auto-detection ON' : 'Auto-detection OFF');
+                });
+
+                // Settings options
+                document.querySelectorAll('.option-btn').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        const parent = e.target.parentElement;
+                        parent.querySelectorAll('.option-btn').forEach(b => b.classList.remove('active'));
+                        e.target.classList.add('active');
+
+                        if (e.target.dataset.size) {
+                            this.settings.size = e.target.dataset.size;
+                            this.updateCaptionStyle();
+                        }
+                        if (e.target.dataset.pos) {
+                            this.settings.position = e.target.dataset.pos;
+                            this.updateCaptionPosition();
+                        }
+                    });
+                });
+
+                // Close settings when clicking outside
+                document.addEventListener('click', (e) => {
+                    if (!e.target.closest('.settings-panel') && !e.target.closest('#settingsBtn')) {
+                        document.getElementById('settingsPanel').classList.remove('show');
+                    }
+                });
+
+                // Keyboard shortcuts
+                document.addEventListener('keydown', (e) => {
+                    if (e.target.tagName === 'INPUT') return;
+
+                    switch(e.key.toLowerCase()) {
+                        case ' ':
+                        case 'k':
+                            e.preventDefault();
+                            this.togglePlay();
+                            break;
+                        case 'f':
+                            this.toggleFullscreen();
+                            break;
+                        case 'm':
+                            this.toggleMute();
+                            break;
+                        case 'c':
+                            this.toggleCaptions();
+                            break;
+                        case 't':
+                            this.toggleTranslationMode();
+                            break;
+                        case 'arrowleft':
+                            this.seekRelative(-10);
+                            break;
+                        case 'arrowright':
+                            this.seekRelative(10);
+                            break;
+                        case 'arrowup':
+                            this.setVolumeLevel(Math.min(1, this.volume + 0.1));
+                            break;
+                        case 'arrowdown':
+                            this.setVolumeLevel(Math.max(0, this.volume - 0.1));
+                            break;
+                    }
+                });
+
+                // Show/hide controls
+                this.container.addEventListener('mousemove', () => this.showControls());
+                this.container.addEventListener('click', () => this.showControls());
+            }
+
+            setupSpeechRecognition() {
+                const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+                if (!SpeechRecognition) {
+                    this.showToast('❌ Speech recognition not supported');
+                    return;
+                }
+
+                this.recognition = new SpeechRecognition();
+                this.recognition.continuous = true;
+                this.recognition.interimResults = true;
+                this.recognition.maxAlternatives = 1;
+
+                this.recognition.onstart = () => {
+                    document.getElementById('captionBadge').classList.add('show');
+                };
+
+                this.recognition.onend = () => {
+                    document.getElementById('captionBadge').classList.remove('show');
+                    if (this.isCaptionsActive && this.isPlaying && !this.video.paused) {
+                        setTimeout(() => {
+                            if (this.isCaptionsActive) {
+                                try {
+                                    this.recognition.start();
+                                } catch(e) {}
+                            }
+                        }, 100);
+                    }
+                };
+
+                this.recognition.onresult = async (event) => {
+                    let finalTranscript = '';
+                    let interimTranscript = '';
+
+                    for (let i = event.resultIndex; i < event.results.length; i++) {
+                        const transcript = event.results[i][0].transcript;
+                        if (event.results[i].isFinal) {
+                            finalTranscript += transcript;
+                        } else {
+                            interimTranscript += transcript;
+                        }
+                    }
+
+                    const currentText = finalTranscript || interimTranscript;
+
+                    // Auto-detect language from the transcript
+                    if (this.isAutoDetect && finalTranscript && !this.detectedLanguage) {
+                        this.detectLanguage(finalTranscript);
+                    }
+
+                    // Translate if needed
+                    if (this.isTranslateMode && this.detectedLanguage && this.detectedLanguage !== this.targetLanguage) {
+                        if (finalTranscript) {
+                            this.captionBox.classList.add('translating');
+                            const translated = await this.translateText(finalTranscript, this.detectedLanguage, this.targetLanguage);
+                            this.captionBox.classList.remove('translating');
+
+                            this.captionText.textContent = translated;
+                            if (this.showOriginal) {
+                                this.originalText.textContent = finalTranscript;
+                                this.originalText.style.display = 'block';
+                            }
+                            this.captionBox.className = 'caption-box final translated';
+                        } else if (interimTranscript) {
+                            this.captionText.textContent = interimTranscript;
+                            this.captionBox.className = 'caption-box interim';
+                        }
+                    } else {
+                        // No translation needed
+                        this.captionText.textContent = currentText;
+                        this.originalText.style.display = 'none';
+                        this.captionBox.className = finalTranscript ? 'caption-box final' : 'caption-box interim';
+                    }
+
+                    if (currentText) {
+                        this.captionBox.style.opacity = '1';
+                        this.langIndicator.style.display = this.isTranslateMode ? 'block' : 'none';
+                        this.langIndicator.textContent = this.targetLanguage.toUpperCase();
+                    }
+                };
+
+                this.recognition.onerror = (event) => {
+                    console.error('Speech recognition error:', event.error);
+                    if (event.error === 'not-allowed') {
+                        this.showToast('🎤 Microphone permission denied');
+                        this.stopCaptions();
+                    }
+                };
+            }
+
+            async detectLanguage(text) {
+                // Simple language detection based on character patterns
+                // In production, you'd use a proper detection API
+
+                const langPatterns = {
+                    'ja': /[぀-ゟ゠-ヿ]/,
+                    'zh': /[一-龯]/,
+                    'ko': /[가-힯]/,
+                    'ar': /[؀-ۿ]/,
+                    'hi': /[ऀ-ॿ]/,
+                    'ru': /[Ѐ-ӿ]/,
+                    'es': /[áéíóúñ¿¡]/i,
+                    'fr': /[àâçéèêëïôùûü]/i,
+                    'de': /[äöüß]/i
+                };
+
+                for (const [lang, pattern] of Object.entries(langPatterns)) {
+                    if (pattern.test(text)) {
+                        this.setDetectedLanguage(lang);
+                        return;
+                    }
+                }
+
+                // Default to English if no pattern matched
+                this.setDetectedLanguage('en');
+            }
+
+            setDetectedLanguage(lang) {
+                this.detectedLanguage = lang;
+                this.detectedLang.textContent = `🎤 ${this.languages[lang]}`;
+                this.detectedLang.classList.add('show');
+                this.langPair.textContent = `${this.languages[lang]} → ${this.languages[this.targetLanguage]}`;
+                this.transStatus.classList.add('show');
+
+                // Update recognition language for better accuracy
+                if (this.speechLangCodes[lang]) {
+                    this.recognition.lang = this.speechLangCodes[lang];
+                }
+
+                this.showToast(`🌍 Detected: ${this.languages[lang]}`);
+            }
+
+            async translateText(text, from, to) {
+                if (!text.trim()) return text;
+
+                const cacheKey = `${text}_${from}_${to}`;
+                if (this.translationCache.has(cacheKey)) {
+                    return this.translationCache.get(cacheKey);
+                }
+
+                // Try multiple free translation APIs
+                try {
+                    // Try MyMemory API (free, no key required)
+                    const response = await fetch(
+                        `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${from}|${to}`,
+                        { timeout: 5000 }
+                    );
+
+                    if (response.ok) {
+                        const data = await response.json();
+                        if (data.responseData && data.responseData.translatedText) {
+                            const translated = data.responseData.translatedText;
+                            this.translationCache.set(cacheKey, translated);
+                            return translated;
+                        }
+                    }
+                } catch (e) {
+                    console.log('MyMemory failed, trying fallback');
+                }
+
+                // Fallback: Try LibreTranslate (requires instance, using public demo)
+                try {
+                    const response = await fetch('https://libretranslate.de/translate', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            q: text,
+                            source: from,
+                            target: to,
+                            format: 'text'
+                        })
+                    });
+
+                    if (response.ok) {
+                        const data = await response.json();
+                        if (data.translatedText) {
+                            this.translationCache.set(cacheKey, data.translatedText);
+                            return data.translatedText;
+                        }
+                    }
+                } catch (e) {
+                    console.log('LibreTranslate failed');
+                }
+
+                // If all APIs fail, return original with indicator
+                return text + ' [Translation unavailable]';
+            }
+
+            renderLanguageGrid() {
+                const grid = document.getElementById('targetLangGrid');
+                grid.innerHTML = '';
+
+                Object.entries(this.languages).forEach(([code, name]) => {
+                    const btn = document.createElement('button');
+                    btn.className = 'language-btn' + (code === this.targetLanguage ? ' active' : '');
+                    btn.textContent = name;
+                    btn.dataset.lang = code;
+                    btn.addEventListener('click', () => {
+                        this.targetLanguage = code;
+                        grid.querySelectorAll('.language-btn').forEach(b => b.classList.remove('active'));
+                        btn.classList.add('active');
+
+                        if (this.detectedLanguage) {
+                            this.langPair.textContent = `${this.languages[this.detectedLanguage]} → ${this.languages[code]}`;
+                        }
+
+                        this.showToast(`🎯 Target: ${name}`);
+
+                        // Clear cache when target changes
+                        this.translationCache.clear();
+                    });
+                    grid.appendChild(btn);
+                });
+            }
+
+            setupGestures() {
+                const gestureArea = document.getElementById('videoContainer');
+                let touchStartX = 0;
+                let touchStartY = 0;
+                let touchStartTime = 0;
+                let isDragging = false;
+
+                gestureArea.addEventListener('touchstart', (e) => {
+                    touchStartX = e.touches[0].clientX;
+                    touchStartY = e.touches[0].clientY;
+                    touchStartTime = Date.now();
+                    isDragging = false;
+                }, { passive: true });
+
+                gestureArea.addEventListener('touchmove', (e) => {
+                    if (!this.video.src) return;
+
+                    const touchX = e.touches[0].clientX;
+                    const touchY = e.touches[0].clientY;
+                    const diffX = touchX - touchStartX;
+                    const diffY = touchY - touchStartY;
+
+                    if (Math.abs(diffX) > Math.abs(diffY) && Math.abs(diffX) > 30) {
+                        isDragging = true;
+                        if (diffX > 0) {
+                            document.getElementById('gestureRight').classList.add('show');
+                        } else {
+                            document.getElementById('gestureLeft').classList.add('show');
+                        }
+                    }
+                }, { passive: true });
+
+                gestureArea.addEventListener('touchend', (e) => {
+                    document.getElementById('gestureLeft').classList.remove('show');
+                    document.getElementById('gestureRight').classList.remove('show');
+
+                    const touchDuration = Date.now() - touchStartTime;
+                    const diffX = e.changedTouches[0].clientX - touchStartX;
+
+                    if (!isDragging && touchDuration < 300) {
+                        // Single tap - toggle play
+                        this.togglePlay();
+                    } else if (Math.abs(diffX) > 50) {
+                        // Swipe - seek
+                        const seekAmount = diffX > 0 ? 10 : -10;
+                        this.seekRelative(seekAmount);
+                    }
+                });
+            }
+
+            loadFile(file) {
+                if (!file) return;
+
+                this.spinner.classList.add('show');
+
+                const url = URL.createObjectURL(file);
+                this.video.src = url;
+                this.video.style.display = 'block';
+                this.emptyState.style.display = 'none';
+
+                this.currentFile = file;
+
+                this.showToast(`📂 Loaded: ${file.name}`);
+
+                this.video.play().then(() => {
+                    this.isPlaying = true;
+                    this.updatePlayButton();
+                    this.container.classList.remove('paused');
+
+                    if (this.isCaptionsActive) {
+                        this.startCaptions();
+                    }
+                }).catch(() => {});
+            }
+
+            togglePlay() {
+                if (!this.video.src) {
+                    document.getElementById('fileInput').click();
+                    return;
+                }
+
+                if (this.video.paused) {
+                    this.video.play();
+                    this.isPlaying = true;
+                    this.container.classList.remove('paused');
+                    if (this.isCaptionsActive) this.startCaptions();
+                } else {
+                    this.video.pause();
+                    this.isPlaying = false;
+                    this.container.classList.add('paused');
+                    if (this.isCaptionsActive) this.stopCaptions();
+                }
+
+                this.updatePlayButton();
+            }
+
+            updatePlayButton() {
+                const icon = this.isPlaying ? '⏸' : '▶';
+                document.getElementById('playPauseBtn').textContent = icon;
+                document.getElementById('centerPlay').textContent = icon;
+            }
+
+            updateProgress() {
+                const percent = (this.video.currentTime / this.video.duration) * 100;
+                document.getElementById('progressFill').style.width = percent + '%';
+                document.getElementById('currentTime').textContent = this.formatTime(this.video.currentTime);
+            }
+
+            seekRelative(seconds) {
+                if (!this.video.duration) return;
+                this.video.currentTime = Math.max(0, Math.min(this.video.currentTime + seconds, this.video.duration));
+                this.updateProgress();
+                this.showToast(`${seconds > 0 ? '⏩ +' : '⏪ '}${seconds}s`);
+            }
+
+            toggleMute() {
+                this.video.muted = !this.video.muted;
+                this.isMuted = this.video.muted;
+
+                const btn = document.getElementById('muteBtn');
+                if (this.isMuted) {
+                    btn.textContent = '🔇';
+                    document.getElementById('volumeFill').style.width = '0%';
+                } else {
+                    btn.textContent = this.volume > 0.5 ? '🔊' : '🔉';
+                    document.getElementById('volumeFill').style.width = (this.volume * 100) + '%';
+                }
+            }
+
+            setVolumeLevel(level) {
+                this.volume = level;
+                this.video.volume = level;
+
+                document.getElementById('volumeFill').style.width = (level * 100) + '%';
+
+                const btn = document.getElementById('muteBtn');
+                if (level === 0) {
+                    btn.textContent = '🔇';
+                    this.video.muted = true;
+                } else if (level < 0.5) {
+                    btn.textContent = '🔉';
+                    this.video.muted = false;
+                } else {
+                    btn.textContent = '🔊';
+                    this.video.muted = false;
+                }
+
+                this.isMuted = this.video.muted;
+            }
+
+            toggleCaptions() {
+                if (!this.recognition) {
+                    this.showToast('❌ Speech recognition not available');
+                    return;
+                }
+
+                this.isCaptionsActive = !this.isCaptionsActive;
+                const btn = document.getElementById('captionBtn');
+
+                if (this.isCaptionsActive) {
+                    btn.classList.add('active');
+                    if (this.isPlaying) {
+                        this.startCaptions();
+                    }
+                    this.showToast('🎤 Captions ON');
+                } else {
+                    btn.classList.remove('active');
+                    this.stopCaptions();
+                    this.showToast('🚫 Captions OFF');
+                }
+            }
+
+            toggleTranslationMode() {
+                this.isTranslateMode = !this.isTranslateMode;
+                const btn = document.getElementById('translateBtn');
+
+                if (this.isTranslateMode) {
+                    btn.classList.add('active');
+                    this.transStatus.classList.add('show');
+                    this.showToast('🌍 Translation Mode ON');
+
+                    // If captions are off, turn them on
+                    if (!this.isCaptionsActive) {
+                        this.toggleCaptions();
+                    }
+                } else {
+                    btn.classList.remove('active');
+                    this.transStatus.classList.remove('show');
+                    this.showToast('🚫 Translation Mode OFF');
+                }
+            }
+
+            startCaptions() {
+                if (!this.recognition) return;
+
+                this.captionHistory = '';
+                this.recognition.lang = this.speechLangCodes[this.detectedLanguage] || 'en-US';
+
+                try {
+                    this.recognition.start();
+                } catch (e) {}
+            }
+
+            stopCaptions() {
+                if (!this.recognition) return;
+
+                try {
+                    this.recognition.stop();
+                } catch (e) {}
+
+                this.captionBox.style.opacity = '0';
+                document.getElementById('captionBadge').classList.remove('show');
+            }
+
+            updateCaptionStyle() {
+                const sizes = {
+                    small: '14px',
+                    medium: '18px',
+                    large: '22px'
+                };
+                this.captionBox.style.fontSize = sizes[this.settings.size];
+            }
+
+            updateCaptionPosition() {
+                if (this.settings.position === 'top') {
+                    this.captionsWrapper.style.top = '80px';
+                    this.captionsWrapper.style.bottom = 'auto';
+                } else {
+                    this.captionsWrapper.style.top = 'auto';
+                    this.captionsWrapper.style.bottom = '100px';
+                }
+            }
+
+            cycleSpeed() {
+                const speeds = [0.5, 0.75, 1, 1.25, 1.5, 2];
+                const currentIndex = speeds.indexOf(this.playbackSpeed);
+                const nextIndex = (currentIndex + 1) % speeds.length;
+                this.playbackSpeed = speeds[nextIndex];
+
+                this.video.playbackRate = this.playbackSpeed;
+                document.getElementById('speedBtn').textContent = this.playbackSpeed + 'x';
+                this.showToast(`⚡ Speed: ${this.playbackSpeed}x`);
+            }
+
+            toggleLoop() {
+                this.isLooping = !this.isLooping;
+                this.video.loop = this.isLooping;
+
+                const btn = document.getElementById('loopBtn');
+                if (this.isLooping) {
+                    btn.classList.add('active');
+                    this.showToast('🔁 Loop ON');
+                } else {
+                    btn.classList.remove('active');
+                    this.showToast('➡️ Loop OFF');
+                }
+            }
+
+            toggleFullscreen() {
+                if (!document.fullscreenElement) {
+                    document.documentElement.requestFullscreen().then(() => {
+                        this.isFullscreen = true;
+                        screen.orientation?.lock('landscape').catch(() => {});
+                    }).catch(() => {
+                        this.video.webkitEnterFullscreen?.();
+                    });
+                } else {
+                    document.exitFullscreen();
+                    this.isFullscreen = false;
+                    screen.orientation?.unlock();
+                }
+            }
+
+            showControls() {
+                const overlay = document.getElementById('controlsOverlay');
+                overlay.classList.remove('hidden');
+
+                clearTimeout(this.hideControlsTimeout);
+                this.hideControlsTimeout = setTimeout(() => {
+                    if (this.isPlaying) {
+                        overlay.classList.add('hidden');
+                    }
+                }, 3000);
+            }
+
+            formatTime(seconds) {
+                if (isNaN(seconds)) return '0:00';
+
+                const mins = Math.floor(seconds / 60);
+                const secs = Math.floor(seconds % 60);
+
+                if (mins >= 60) {
+                    const hours = Math.floor(mins / 60);
+                    const remainingMins = mins % 60;
+                    return `${hours}:${remainingMins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+                }
+
+                return `${mins}:${secs.toString().padStart(2, '0')}`;
+            }
+
+            showToast(message) {
+                const toast = document.getElementById('toast');
+                toast.textContent = message;
+                toast.classList.add('show');
+
+                setTimeout(() => {
+                    toast.classList.remove('show');
+                }, 2500);
+            }
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            window.player = new VLCProPlayer();
+        });
+    </script>
+<script>
+    document.addEventListener('deviceready', function() {
+        console.log('✅ Cordova device ready');
+
+        // Request permissions on Android
+        if (window.cordova && cordova.platformId === 'android') {
+            var permissions = cordova.plugins.permissions;
+            if (permissions) {
+                permissions.requestPermissions([
+                    permissions.RECORD_AUDIO,
+                    permissions.READ_EXTERNAL_STORAGE,
+                    permissions.WRITE_EXTERNAL_STORAGE
+                ], function(status) {
+                    console.log('✅ Permissions granted');
+                }, function(error) {
+                    console.warn('⚠️ Permissions error:', error);
+                });
+            }
+        }
+
+        // Handle back button
+        document.addEventListener('backbutton', function(e) {
+            e.preventDefault();
+            if (window.player && window.player.isPlaying) {
+                window.player.togglePlay();
+            } else {
+                navigator.app.exitApp();
+            }
+        }, false);
+
+    }, false);
+    </script>
+</body>
+</html>
