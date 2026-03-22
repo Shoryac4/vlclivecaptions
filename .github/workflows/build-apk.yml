@@ -13,29 +13,41 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
       
-    - name: Setup Node.js 20
+    - name: Setup Node.js 22
       uses: actions/setup-node@v4
       with:
-        node-version: '20'
+        node-version: '22'
         
-    - name: Setup Java 11 (Works with Cordova)
+    - name: Setup Java 21 (Latest LTS)
       uses: actions/setup-java@v4
       with:
         distribution: 'temurin'
-        java-version: '11'
+        java-version: '21'
         
-    - name: Setup Android SDK
-      uses: android-actions/setup-android@v3
-      
+    - name: Install Android SDK
+      run: |
+        export ANDROID_HOME=$HOME/android-sdk
+        mkdir -p $ANDROID_HOME
+        cd $ANDROID_HOME
+        wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+        unzip -q commandlinetools-linux-11076708_latest.zip
+        mkdir -p cmdline-tools/latest
+        mv cmdline-tools/* cmdline-tools/latest/ 2>/dev/null || true
+        export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin
+        yes | sdkmanager --licenses || true
+        sdkmanager "platform-tools" "platforms;android-33" "build-tools;33.0.0" || true
+        echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
+        echo "$ANDROID_HOME/platform-tools" >> $GITHUB_PATH
+        
     - name: Install Cordova
       run: npm install -g cordova
         
     - name: Create Cordova Project
       run: cordova create build com.vlcpro.translator "VLC Pro Translator"
         
-    - name: Add Android Platform
+    - name: Add Android Platform (Latest)
       working-directory: ./build
-      run: cordova platform add android@10.1.2
+      run: cordova platform add android@latest
         
     - name: Install Plugins
       working-directory: ./build
@@ -53,10 +65,14 @@ jobs:
         
     - name: Build Debug APK
       working-directory: ./build
+      env:
+        ANDROID_HOME: ${{ env.ANDROID_HOME }}
       run: cordova build android --debug
         
     - name: Build Release APK
       working-directory: ./build
+      env:
+        ANDROID_HOME: ${{ env.ANDROID_HOME }}
       run: cordova build android --release
         
     - name: Upload Debug APK
