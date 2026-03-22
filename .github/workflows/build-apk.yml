@@ -35,7 +35,7 @@ jobs:
         mv cmdline-tools/* cmdline-tools/latest/ 2>/dev/null || true
         export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin
         yes | sdkmanager --licenses || true
-        sdkmanager "platform-tools" "platforms;android-33" "build-tools;33.0.0" || true
+        sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0" || true
         echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
         echo "$ANDROID_HOME/platform-tools" >> $GITHUB_PATH
         
